@@ -1,0 +1,24 @@
+# Gestionnaire de Bibliothèque Musicale - Dépendances Python
+# Projet L3 Informatique - Mineure Python 2025-2026
+
+# Extraction et modification des métadonnées audio
+mutagen==1.47.0
+
+# Vérification des types MIME des fichiers
+python-magic==0.4.27
+
+# Lecture audio
+pygame==2.5.2
+
+# Gestion des images (pochettes d'albums)
+Pillow==10.1.0
+
+# Requêtes HTTP pour les API web
+requests==2.31.0
+
+# Interface graphique (inclus avec Python, mais au cas où)
+# tkinter est normalement inclus avec Python
+
+# Optionnel : pour les tests
+pytest==7.4.3
+pytest-cov==4.1.0
