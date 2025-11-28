@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<playlist version="1" xmlns="http://xspf.org/ns/0/">
+  <title>Playlist générée automatiquement</title>
+  <trackList>
+    <track>
+      <location>file://C:\Users\CHEKABI\Desktop\HASSANI_CHEKABI_OUARET\test_music\zaz.mp3</location>
+      <title>ZAZ - Je veux (Clip officiel)</title>
+      <creator>Zaz Official</creator>
+      <album>Album inconnu</album>
+      <duration>216000</duration>
+    </track>
+  </trackList>
+</playlist>

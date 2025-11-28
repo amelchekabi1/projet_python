@@ -2,16 +2,12 @@ import argparse
 import sys
 import os
 
-# Import des modules de la bibliothèque (vos collègues vont les créer)
-# Décommentez au fur et à mesure qu'ils sont disponibles
-# from library.audiofile import AudioFile
-# from library.directory_scanner import DirectoryScanner
-# from library.playlist import Playlist
-
+# Ajout du chemin pour importer library
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import argparse
 from library.xspf_writer import write_xspf
+from library.audiofile import AudioFile
+from library.directory_scanner import DirectoryScanner
 
 
 def parse_arguments():
@@ -23,10 +19,14 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser(
         description="Gestionnaire de bibliothèque musicale MP3/FLAC",
-        epilog="Exemple: python3 cli.py -f musique.mp3"
+        epilog="Exemples:\n"
+               "  python3 cli.py -f musique.mp3\n"
+               "  python3 cli.py -d ./music/ -o playlist.xspf\n"
+               "  python3 cli.py -p musique.mp3",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    # Groupe mutuellement exclusif : soit fichier, soit dossier
+    # Groupe mutuellement exclusif : soit fichier, soit dossier, soit play
     group = parser.add_mutually_exclusive_group(required=False)
     
     group.add_argument(
@@ -54,10 +54,31 @@ def parse_arguments():
         '-o', '--output',
         type=str,
         metavar='FICHIER.xspf',
-        help='Fichier de sortie pour la playlist (format XSPF)'
+        help='Fichier de sortie pour la playlist (nécessite -d)'
     )
     
     return parser.parse_args()
+
+
+def validate_audio_file(file_path):
+    """
+    Valide qu'un fichier existe et est au bon format.
+    
+    Args:
+        file_path (str): Chemin vers le fichier
+        
+    Raises:
+        SystemExit: Si le fichier n'est pas valide
+    """
+    if not os.path.exists(file_path):
+        print(f" Erreur : Le fichier '{file_path}' n'existe pas.")
+        sys.exit(1)
+    
+    # Vérifier l'extension
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext not in ['.mp3', '.flac']:
+        print(f" Erreur : Format non supporté '{ext}'. Seulement MP3 et FLAC.")
+        sys.exit(1)
 
 
 def display_file_metadata(file_path):
@@ -71,44 +92,57 @@ def display_file_metadata(file_path):
     print(f"Analyse du fichier : {file_path}")
     print(f"{'='*60}\n")
     
-    # Vérifier que le fichier existe
-    if not os.path.exists(file_path):
-        print(f"❌ Erreur : Le fichier '{file_path}' n'existe pas.")
+    validate_audio_file(file_path)
+    
+    try:
+        # Utiliser la factory method from_path
+        audio = AudioFile.from_path(file_path)
+        
+        # Récupérer les métadonnées
+        metadata = audio.read_metadata()
+        metadata_dict = metadata.to_dict()
+        
+        # Informations du fichier
+        print(" Informations du fichier :")
+        print(f"  - Nom      : {os.path.basename(file_path)}")
+        print(f"  - Chemin   : {os.path.abspath(file_path)}")
+        print(f"  - Taille   : {os.path.getsize(file_path):,} octets")
+        
+        # Déterminer le format
+        ext = os.path.splitext(file_path)[1].lower()
+        print(f"  - Format   : {ext[1:].upper()}")
+        
+        # Métadonnées audio
+        print("\n🎵 Métadonnées :")
+        print(f"  - Titre       : {metadata_dict['title'] or 'Inconnu'}")
+        print(f"  - Artiste     : {metadata_dict['artist'] or 'Inconnu'}")
+        print(f"  - Album       : {metadata_dict['album'] or 'Inconnu'}")
+        print(f"  - Piste n°    : {metadata_dict['track_no'] or 'Inconnu'}")
+        print(f"  - Année       : {metadata_dict['year'] or 'Inconnu'}")
+        print(f"  - Genre       : {metadata_dict['genre'] or 'Inconnu'}")
+        
+        duration = metadata_dict['duration_sec']
+        if duration:
+            minutes = duration // 60
+            seconds = duration % 60
+            print(f"  - Durée       : {duration} secondes ({minutes}:{seconds:02d})")
+        else:
+            print(f"  - Durée       : Inconnue")
+        
+    except ValueError as e:
+        print(f" Erreur : {e}")
         sys.exit(1)
-    
-    # Vérifier l'extension
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext not in ['.mp3', '.flac']:
-        print(f"❌ Erreur : Format non supporté. Seulement MP3 et FLAC.")
+    except Exception as e:
+        print(f" Erreur lors de la lecture des métadonnées : {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
-    
-    # TODO: Utiliser la classe AudioFile de vos collègues
-    # audio = AudioFile(file_path)
-    # metadata = audio.get_metadata()
-    
-    # Pour l'instant, affichage de démonstration
-    print("📁 Informations du fichier :")
-    print(f"  - Nom : {os.path.basename(file_path)}")
-    print(f"  - Taille : {os.path.getsize(file_path)} octets")
-    print(f"  - Format : {ext[1:].upper()}")
-    
-    print("\n🎵 Métadonnées :")
-    print("  - Titre : [À implémenter avec AudioFile]")
-    print("  - Artiste : [À implémenter avec AudioFile]")
-    print("  - Album : [À implémenter avec AudioFile]")
-    print("  - Durée : [À implémenter avec AudioFile]")
-    print("  - Année : [À implémenter avec AudioFile]")
-    
-    # Exemple de ce que ça donnera :
-    # print(f"  - Titre : {metadata['title']}")
-    # print(f"  - Artiste : {metadata['artist']}")
-    # print(f"  - Album : {metadata['album']}")
-    # print(f"  - Durée : {metadata['duration']} secondes")
 
 
 def scan_directory(directory_path, output_file=None):
     """
     Scanne un dossier récursivement et liste les fichiers audio.
+    Génère optionnellement une playlist XSPF.
     
     Args:
         directory_path (str): Chemin vers le dossier
@@ -120,50 +154,64 @@ def scan_directory(directory_path, output_file=None):
     
     # Vérifier que le dossier existe
     if not os.path.isdir(directory_path):
-        print(f"❌ Erreur : Le dossier '{directory_path}' n'existe pas.")
+        print(f" Erreur : Le dossier '{directory_path}' n'existe pas.")
         sys.exit(1)
     
-    # TODO: Utiliser DirectoryScanner de vos collègues
-    # scanner = DirectoryScanner(directory_path)
-    # files = scanner.scan()
-    
-    # Pour l'instant, démonstration simple
     print("🔍 Recherche de fichiers MP3 et FLAC...\n")
     
-    found_files = []
-    for root, dirs, files in os.walk(directory_path):
-        for file in files:
-            if file.lower().endswith(('.mp3', '.flac')):
-                file_path = os.path.join(root, file)
-                found_files.append(file_path)
-                print(f"  ✓ {file_path}")
+    # Utiliser DirectoryScanner
+    scanner = DirectoryScanner(include_hidden=False, sanity_check_with_mutagen=True)
     
-    print(f"\n📊 Total : {len(found_files)} fichier(s) trouvé(s)")
+    try:
+        found_files = scanner.scan(directory_path)
+        
+        # Afficher les fichiers trouvés
+        for file_path in found_files:
+            rel_path = os.path.relpath(file_path, directory_path)
+            print(f"  ✓ {rel_path}")
+        
+        print(f"\n Résultat : {len(found_files)} fichier(s) audio valide(s)")
+        
+        # Génération de la playlist si demandée
+        if output_file and found_files:
+            generate_playlist(found_files, output_file)
+        elif output_file and not found_files:
+            print("\n  Aucun fichier trouvé, playlist non créée.")
+            
+    except Exception as e:
+        print(f" Erreur lors du scan : {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+def generate_playlist(files, output_file):
+    """
+    Génère une playlist XSPF à partir d'une liste de fichiers.
     
-    # Si option -o spécifiée, créer la playlist
-    if output_file:
-        print(f"\n💾 Génération de la playlist : {output_file}")
+    Args:
+        files (list): Liste des chemins de fichiers audio
+        output_file (str): Chemin du fichier XSPF de sortie
+    """
+    print(f"\n Génération de la playlist : {output_file}")
+    
+    try:
+        from library.playlist import create_playlist_from_files
+        from library.xspf_writer import write_xspf
         
-        # Créer des objets factices pour le moment
-        # TODO: Remplacer par les vraies classes Playlist et Track quand disponibles
-        class SimpleTrack:
-            def __init__(self, path):
-                self.path = os.path.abspath(path)
-                self.title = os.path.basename(path)
-                self.artist = "Artiste inconnu"
-                self.album = "Album inconnu"
-                self.duration = None
+        # Créer la playlist avec extraction automatique des métadonnées
+        playlist = create_playlist_from_files(files, "Playlist générée automatiquement")
         
-        class SimplePlaylist:
-            def __init__(self, name, files):
-                self.name = name
-                self.tracks = [SimpleTrack(f) for f in files]
-        
-        # Créer la playlist
-        playlist = SimplePlaylist("Playlist générée automatiquement", found_files)
+        # Écrire le fichier XSPF
         write_xspf(playlist, output_file)
         
-        print(f"🔗 Validez-la sur : https://validator.xspf.org/")
+        print(f" Playlist créée avec succès : {len(playlist.tracks)} piste(s)")
+        print(f" Validez votre playlist sur : https://validator.xspf.org/")
+        
+    except Exception as e:
+        print(f" Erreur lors de la génération de la playlist : {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 def play_file(file_path):
@@ -177,14 +225,51 @@ def play_file(file_path):
     print(f"Lecture du fichier : {file_path}")
     print(f"{'='*60}\n")
     
-    if not os.path.exists(file_path):
-        print(f"❌ Erreur : Le fichier '{file_path}' n'existe pas.")
-        sys.exit(1)
+    validate_audio_file(file_path)
     
-    # TODO: Implémenter la lecture audio
-    print("🎵 Lecture en cours...")
-    print("⏸️  [Fonction de lecture à implémenter]")
-    print("💡 Utilisez pygame.mixer ou python-vlc")
+    try:
+        # Afficher les métadonnées d'abord
+        audio = AudioFile.from_path(file_path)
+        metadata = audio.read_metadata()
+        
+        print(" Lecture en cours :")
+        print(f"  - Titre   : {metadata.title or 'Inconnu'}")
+        print(f"  - Artiste : {metadata.artist or 'Inconnu'}")
+        print(f"  - Album   : {metadata.album or 'Inconnu'}")
+        
+        if metadata.duration_sec:
+            minutes = metadata.duration_sec // 60
+            seconds = metadata.duration_sec % 60
+            print(f"  - Durée   : {minutes}:{seconds:02d}")
+        
+        print("\n⏯  Appuyez sur Ctrl+C pour arrêter...\n")
+        
+        # Initialiser pygame mixer
+        import pygame
+        pygame.mixer.init()
+        
+        # Charger et jouer le fichier
+        pygame.mixer.music.load(file_path)
+        pygame.mixer.music.play()
+        
+        # Attendre que la lecture se termine
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)
+        
+        print("\n✅ Lecture terminée.")
+        
+    except ImportError:
+        print("Erreur : pygame n'est pas installé.")
+        print("Installez-le avec : pip install pygame")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n\n⏸ Lecture interrompue.")
+        pygame.mixer.music.stop()
+    except Exception as e:
+        print(f" Erreur lors de la lecture : {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 def main():
@@ -192,12 +277,18 @@ def main():
     
     # Si aucun argument, afficher l'aide
     if len(sys.argv) == 1:
-        print("❌ Erreur : Aucun argument fourni.")
-        print("💡 Utilisez -h ou --help pour afficher l'aide.\n")
+        print(" Erreur : Aucun argument fourni.")
+        print(" Utilisez -h ou --help pour afficher l'aide.\n")
         sys.exit(1)
     
     # Parser les arguments
     args = parse_arguments()
+    
+    # Vérifier que -o est utilisé avec -d uniquement
+    if args.output and not args.directory:
+        print(" Erreur : L'option -o (output) nécessite l'option -d (directory)")
+        print(" Exemple : python3 cli.py -d ./music/ -o playlist.xspf\n")
+        sys.exit(1)
     
     # Traitement selon les options
     if args.file:
@@ -210,8 +301,8 @@ def main():
         play_file(args.play)
     
     else:
-        print("❌ Erreur : Option non reconnue.")
-        print("💡 Utilisez -h ou --help pour afficher l'aide.\n")
+        print(" Erreur : Option non reconnue.")
+        print(" Utilisez -h ou --help pour afficher l'aide.\n")
         sys.exit(1)
 
 
@@ -219,8 +310,10 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n⚠️  Programme interrompu par l'utilisateur.")
+        print("\n\n  Programme interrompu par l'utilisateur.")
         sys.exit(0)
     except Exception as e:
-        print(f"\n❌ Erreur inattendue : {e}")
+        print(f"\n Erreur inattendue : {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
