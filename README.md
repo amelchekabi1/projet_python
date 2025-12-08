@@ -206,7 +206,7 @@ NOM1_NOM2_NOM3/
 - [x] Gestion des erreurs
 
 **Mode GUI :**
-- [ ] Interface graphique (en cours)
+- [ ] Interface graphique
 - [ ] Navigation dans l'arborescence
 - [ ] Affichage des métadonnées
 - [ ] Création de playlists personnalisées
