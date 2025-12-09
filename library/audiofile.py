@@ -50,6 +50,10 @@ class AudioFile(ABC):
         self.path = Path(path)
 
     @abstractmethod
+    def update_metadata(self, title=None, artist=None, album=None, year=None, genre=None, track_no=None):
+        """Met à jour les métadonnées du fichier."""
+        raise NotImplementedError
+    @abstractmethod
     def read_metadata(self) -> Metadata:
         """Retourne les métadonnées sous forme d'objet Metadata."""
         raise NotImplementedError
@@ -124,9 +128,12 @@ class MP3AudioFile(AudioFile):
         title = self._get_id3_text("TIT2")
         artist = self._get_id3_text("TPE1")
         album = self._get_id3_text("TALB")
-        year = self._get_id3_text("TDRC") or self._get_id3_text("TYER")
+        year_raw = self._get_id3_text("TDRC") or self._get_id3_text("TYER")  # ← BON !
         genre = self._get_id3_text("TCON")
         track_no = self._get_id3_text("TRCK")
+        
+        # Formater la date si nécessaire
+        year = self._format_date(year_raw) if year_raw else None
 
         return Metadata(
             title=title,
@@ -137,6 +144,82 @@ class MP3AudioFile(AudioFile):
             year=year,
             genre=genre,
         )
+    def update_metadata(self, title=None, artist=None, album=None, year=None, genre=None, track_no=None):
+        """
+        Met à jour les métadonnées ID3 du fichier MP3.
+        
+        Args:
+            title: Nouveau titre
+            artist: Nouvel artiste
+            album: Nouvel album
+            year: Nouvelle année
+            genre: Nouveau genre
+            track_no: Nouveau numéro de piste
+        
+        Returns:
+            bool: True si sauvegarde réussie
+        """
+        from mutagen.id3 import TIT2, TPE1, TALB, TDRC, TCON, TRCK
+        
+        try:
+            # Créer les tags si absents
+            if not self.audio.tags:
+                self.audio.add_tags()
+            
+            # Mettre à jour les champs fournis
+            if title is not None:
+                self.audio.tags["TIT2"] = TIT2(encoding=3, text=title)
+            if artist is not None:
+                self.audio.tags["TPE1"] = TPE1(encoding=3, text=artist)
+            if album is not None:
+                self.audio.tags["TALB"] = TALB(encoding=3, text=album)
+            if year is not None:
+                self.audio.tags["TDRC"] = TDRC(encoding=3, text=str(year))
+            if genre is not None:
+                self.audio.tags["TCON"] = TCON(encoding=3, text=genre)
+            if track_no is not None:
+                self.audio.tags["TRCK"] = TRCK(encoding=3, text=str(track_no))
+            
+            # Sauvegarder
+            self.audio.save()
+            return True
+        except Exception as e:
+            print(f"Erreur lors de la mise à jour des tags MP3 : {e}")
+            return False
+        
+    def _format_date(self, date_str: str) -> str:
+        """
+        Formate une date du format YYYYMMDD vers JJ/MM/AAAA.
+        
+        Args:
+            date_str: Date sous forme de chaîne
+            
+        Returns:
+            str: Date formatée
+        """
+        if not date_str:
+            return None
+        
+        date_str = str(date_str).strip()
+        
+        # Format YYYYMMDD (ex: 20180705)
+        if len(date_str) == 8 and date_str.isdigit():
+            year = date_str[0:4]
+            month = date_str[4:6]
+            day = date_str[6:8]
+            return f"{day}/{month}/{year}"
+        
+        # Format YYYY-MM-DD (ex: 2018-07-05)
+        elif '-' in date_str and len(date_str) == 10:
+            parts = date_str.split('-')
+            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+        
+        # Format YYYY seulement (ex: 2018)
+        elif len(date_str) == 4 and date_str.isdigit():
+            return date_str
+        
+        # Autre : retourner tel quel
+        return date_str
 
 
 class FLACAudioFile(AudioFile):
@@ -170,7 +253,8 @@ class FLACAudioFile(AudioFile):
         artist = self._get_vorbis("artist")
         album = self._get_vorbis("album")
         track_no = self._get_vorbis("tracknumber")
-        year = self._get_vorbis("date") or self._get_vorbis("year")
+        year_raw = self._get_id3_text("TDRC") or self._get_id3_text("TYER")
+        year = self._format_date(year_raw) if year_raw else None
         genre = self._get_vorbis("genre")
 
         return Metadata(
@@ -182,3 +266,57 @@ class FLACAudioFile(AudioFile):
             year=year,
             genre=genre,
         )
+    def update_metadata(self, title=None, artist=None, album=None, year=None, genre=None, track_no=None):
+        """
+        Met à jour les métadonnées Vorbis Comment du fichier FLAC.
+        
+        Returns:
+            bool: True si sauvegarde réussie
+        """
+        try:
+            # Mettre à jour les champs fournis
+            if title is not None:
+                self.audio["TITLE"] = title
+            if artist is not None:
+                self.audio["ARTIST"] = artist
+            if album is not None:
+                self.audio["ALBUM"] = album
+            if year is not None:
+                self.audio["DATE"] = str(year)
+            if genre is not None:
+                self.audio["GENRE"] = genre
+            if track_no is not None:
+                self.audio["TRACKNUMBER"] = str(track_no)
+            
+            # Sauvegarder
+            self.audio.save()
+            return True
+        except Exception as e:
+            print(f"Erreur lors de la mise à jour des tags FLAC : {e}")
+            return False
+
+    def _format_date(self, date_str: str) -> str:
+        """Formate une date du format YYYYMMDD vers JJ/MM/AAAA."""
+        if not date_str:
+            return None
+        
+        date_str = str(date_str).strip()
+        
+        # Format YYYYMMDD (ex: 20180705)
+        if len(date_str) == 8 and date_str.isdigit():
+            year = date_str[0:4]
+            month = date_str[4:6]
+            day = date_str[6:8]
+            return f"{day}/{month}/{year}"
+        
+        # Format YYYY-MM-DD (ex: 2018-07-05)
+        elif '-' in date_str and len(date_str) == 10:
+            parts = date_str.split('-')
+            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+        
+        # Format YYYY seulement (ex: 2018)
+        elif len(date_str) == 4 and date_str.isdigit():
+            return date_str
+        
+        # Autre : retourner tel quel
+        return date_str    
