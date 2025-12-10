@@ -1,19 +1,25 @@
+# -*- coding: utf-8 -*-
+"""
+validation.py
+
+Fonctions de validation simples pour les fichiers audio.
+Ce module vérifie l’existence du fichier et son extension,
+conformément aux exigences du projet :
+
+- Seuls les fichiers MP3 et FLAC sont considérés comme valides.
+- Toute erreur de validation déclenche une exception explicite.
+
+Module utilisé par la CLI et parfois par le scanner de fichiers.
+"""
+
 import os
 
-def validate_audio_file(file_path):
+
+def validate_audio_file(file_path: str) -> bool:
     """
-    Vérifie que le fichier existe et que son extension est valide (MP3/FLAC).
-    Renvoie True si ok, sinon lève une exception.
-    """
+    Vérifie qu'un fichier audio est valide pour le traitement.
 
-    if not os.path.exists(file_path):
-        raise ValueError(f"Le fichier '{file_path}' n'existe pas.")
+    Cette fonction effectue trois vérifications successives :
 
-    if not os.path.isfile(file_path):
-        raise ValueError(f"'{file_path}' n'est pas un fichier valide.")
-
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext not in ['.mp3', '.flac']:
-        raise ValueError("Format non supporté. Seulement MP3 et FLAC.")
-
-    return True
+    1. **Présence sur le disque** : le chemin doit pointer vers un fichier existant.
+    2. **Nature du chemin** : le chemin doit correspondre à un fichier
