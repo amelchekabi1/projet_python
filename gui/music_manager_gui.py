@@ -157,12 +157,11 @@ def save_cover_image(self):
     except Exception as e:
         QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement: {e}")
 
-# ----------------------------
+
 # Lightweight fallback models
 # Ces classes servent de repli si les classes du package `library`
 # ne sont pas disponibles : elles stockent les infos essentielles
 # d'une piste et d'une playlist.
-# ----------------------------
 @dataclass
 class SimpleTrack:
     path: str
@@ -187,11 +186,9 @@ class SimplePlaylist:
         if 0 <= index < len(self.tracks):
             self.tracks.pop(index)
 
-# ----------------------------
 # Utility helpers
 # Fonctions utilitaires réutilisées par l'interface : formatage durée,
 # extraction de pochette depuis les métadonnées, conversion en QPixmap, etc.
-# ----------------------------
 def human_duration(sec: Optional[int]) -> str:
     """Formate une durée (en secondes) vers une chaîne 'M:SS'.
 
@@ -285,12 +282,11 @@ def qpix_from_bytes(data: bytes, max_size=(320,320)) -> QPixmap:
         except Exception:
             return QPixmap()
 
-# ----------------------------
+
 # Scanner thread (non-blocking)
 # Classe qui parcourt le dossier en tâche de fond pour trouver des fichiers
 # audio sans bloquer l'interface. Elle émet des signaux Qt pour
 # notifier l'UI (fichier trouvé, progression, statut, terminé).
-# ----------------------------
 class ScannerThread(QThread):
     file_found = Signal(str)
     progress = Signal(int)     # 0-100
@@ -452,7 +448,6 @@ class AnimatedContainer(QFrame):
 
 
 
-# ----------------------------
 # Player wrapper: QMediaPlayer preferred, else pygame fallback
 # Classe qui encapsule le lecteur audio. Elle choisit le moteur disponible
 # (QtMultimedia ou pygame) et fournit des méthodes simples : play/pause/stop.
@@ -460,7 +455,6 @@ class AnimatedContainer(QFrame):
 # Fournit : play(path, start_ms=0), pause(), resume(), stop(), set_position(ms), get_position_ms()
 # Maintient : current_path, is_paused, is_playing pour permettre à l'UI de décider s'il faut reprendre ou relancer.
 # Comportement en cas de fallback : le code essaie d'abord QtMultimedia, puis pygame si Qt indisponible.
-# ----------------------------
 class Player:
     """Wrapper unifiant deux moteurs audio : QtMultimedia (préféré) ou pygame (fallback).
 
@@ -643,9 +637,8 @@ class Player:
         return 0
 
 
-# ----------------------------
-# Main GUI window
-# ----------------------------
+# Main GUI window :
+
 # Fenêtre principale de l'application
 # Contient la construction complète de l'interface (scanner, playlist,
 # métadonnées, contrôles de lecture) et les handlers associés.
@@ -834,11 +827,15 @@ class MusicManagerMain(QMainWindow):
         btn_save.clicked.connect(self.save_playlist)
         btn_cover.clicked.connect(lambda: save_cover_image(self))
 
+        btn_load = QPushButton("Charger XSPF")
+        btn_load.clicked.connect(self.load_playlist)
+
         row2.addWidget(btn_up)
         row2.addWidget(btn_down)
         row2.addWidget(btn_remove)
         row2.addWidget(btn_save)
         row2.addWidget(btn_cover)
+        row2.addWidget(btn_load)
 
         middle_layout.addLayout(row2)
 
@@ -853,7 +850,6 @@ class MusicManagerMain(QMainWindow):
         right_layout.addWidget(lbl_info)
 
         # modern cover area
-        # Zone dédiée à l'affichage de la pochette — style moderne, centrée et redimensionnable.
         self.cover_label = QLabel()
         self.cover_label.setFixedSize(300, 300)
         self.cover_label.setAlignment(Qt.AlignCenter)
@@ -867,8 +863,7 @@ class MusicManagerMain(QMainWindow):
         self.cover_label.setScaledContents(True)
         right_layout.addWidget(self.cover_label, alignment=Qt.AlignCenter)
 
-        # dynamic time label and thin progress line (placed before buttons)
-        # Étiquette de temps dynamique et barre de progression fine, affichées avant les contrôles.
+        # dynamic time label and thin progress line
         self.time_label = QLabel("0:00 / 0:00")
         self.time_label.setAlignment(Qt.AlignCenter)
         self.time_label.setStyleSheet("color: #cfd8e3; padding:4px; font-weight:600;")
@@ -877,7 +872,7 @@ class MusicManagerMain(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setFixedHeight(6)
-        self.progress_bar.setRange(0, 100)  # sera mis à jour après lecture des métadonnées
+        self.progress_bar.setRange(0, 100)
         self.progress_bar.setStyleSheet("""
         QProgressBar {
             background-color: #262b33;
@@ -890,14 +885,34 @@ class MusicManagerMain(QMainWindow):
         """)
         right_layout.addWidget(self.progress_bar)
 
-
+        #NOUVELLE SECTION MÉTADONNÉES AVEC BOUTONS
+        meta_frame = QFrame()
+        meta_layout = QVBoxLayout(meta_frame)
+        
         self.meta_title = QLabel("Titre: -")
         self.meta_artist = QLabel("Artiste: -")
         self.meta_album = QLabel("Album: -")
         self.meta_duration = QLabel("Durée: -")
         for w in (self.meta_title, self.meta_artist, self.meta_album, self.meta_duration):
             w.setStyleSheet("padding:4px;")
-            right_layout.addWidget(w)
+            meta_layout.addWidget(w)
+        
+        #NOUVEAUX BOUTONS POUR LES MÉTADONNÉES
+        meta_btn_row = QHBoxLayout()
+        btn_edit_tags = QPushButton("Modifier TAGS")
+        btn_search_api = QPushButton("Rechercher API")
+        btn_dl_cover = QPushButton("Télécharger cover")
+        
+        btn_edit_tags.clicked.connect(self.edit_tags)
+        btn_search_api.clicked.connect(self.search_online_metadata)
+        btn_dl_cover.clicked.connect(self.download_cover_online)
+        
+        meta_btn_row.addWidget(btn_edit_tags)
+        meta_btn_row.addWidget(btn_search_api)
+        meta_btn_row.addWidget(btn_dl_cover)
+        meta_layout.addLayout(meta_btn_row)
+        
+        right_layout.addWidget(meta_frame)
 
         # Playback controls
         # Boutons de contrôle de lecture : précédent, play, pause, suivant.
@@ -991,9 +1006,9 @@ class MusicManagerMain(QMainWindow):
         # Utiliser la Playlist du package projet si présente, sinon utiliser le SimplePlaylist de repli.
         self.playlist = ProjectPlaylist("GUI Playlist") if ProjectPlaylist else SimplePlaylist("GUI Playlist")
 
-    # -------------------------
+    
     # Left panel handlers
-    # -------------------------
+    
     # Ouvre un dialogue pour choisir un dossier et lance le scan.
     def browse_folder(self):
         p = QFileDialog.getExistingDirectory(self, "Choisir dossier musical")
@@ -1025,9 +1040,9 @@ class MusicManagerMain(QMainWindow):
         self.scanner.status.connect(self.status.showMessage)
         self.scanner.start()
         self.status.showMessage("Scan lancé...")
-        # -------------------------
+        
     # Playback controls (pro)
-    # -------------------------
+    
     def _play_index(self, index: int, start_ms: int = 0):
         """Sélectionne la ligne de la playlist et démarre la lecture à start_ms (ms)."""
         count = self.playlist_widget.count()
@@ -1174,9 +1189,9 @@ class MusicManagerMain(QMainWindow):
         self._last_prev_click = now
 
 
-    # -------------------------
+    
     # Position/duration handlers
-    # -------------------------
+    
     def _on_media_status(self, status):
         """Gestionnaire Qt pour la fin de média : avance automatiquement à la piste suivante."""
         try:
@@ -1283,9 +1298,9 @@ class MusicManagerMain(QMainWindow):
         path = item.data(Qt.ItemDataRole.UserRole)
         self.show_metadata_for_path(path)
 
-    # -------------------------
+    
     # Metadata display
-    # -------------------------
+    
     # Lit et affiche les métadonnées d'un fichier (titre, artiste, album,
     # durée) et affiche la pochette si elle est trouvée.
     def show_metadata_for_path(self, path: str):
@@ -1296,7 +1311,7 @@ class MusicManagerMain(QMainWindow):
         duration_txt = "-"
         duration_sec = None
 
-        # --- read metadata first ---
+        #read metadata first
         try:
             if AudioFile:
                 af = AudioFile.from_path(path)
@@ -1327,7 +1342,7 @@ class MusicManagerMain(QMainWindow):
         except Exception as e:
             self.status.showMessage(f"Erreur métadonnées: {e}")
 
-        # --- store duration for progress AFTER reading metadata ---
+        #store duration for progress AFTER reading metadata
         self._duration_sec = duration_sec or 0
         self._total_ms = int((duration_sec or 0) * 1000)
         if self._total_ms > 0:
@@ -1365,9 +1380,9 @@ class MusicManagerMain(QMainWindow):
         self.cover_label.setText("No cover")
 
 
-    # -------------------------
+    
     # Playlist actions
-    # -------------------------
+    
     # Ajoute les fichiers sélectionnés dans la liste de gauche à la
     # playlist centrale (évite les doublons et collecte les métadonnées).
     def add_selected_to_playlist(self):
@@ -1504,53 +1519,807 @@ class MusicManagerMain(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible d'enregistrer la playlist : {e}")
 
-
-    def _update_pygame_progress(self):
-        # pygame.mixer.music.get_pos retourne ms depuis play, peut être -1 quand arrêté
-        try:
-            pos = pygame.mixer.music.get_pos()
-        except Exception:
-            pos = -1
-        if pos is None or pos < 0:
-            # arrêté ou inconnu
+    
+    # NOUVELLES FONCTIONNALITÉS AJOUTÉES
+    
+    
+    def load_playlist(self):
+        """Charger une playlist XSPF existante depuis un fichier.
+        
+        Cette méthode permet de :
+        - Ouvrir un dialogue de sélection de fichier XSPF
+        - Parser le fichier XML avec gestion du namespace XSPF
+        - Vider la playlist actuelle
+        - Charger toutes les pistes avec leurs métadonnées
+        - Mettre à jour l'interface graphique
+        
+        Le parsing gère à la fois les fichiers avec et sans namespace XML.
+        """
+        filename, _ = QFileDialog.getOpenFileName(self, "Ouvrir playlist", "", "XSPF files (*.xspf)")
+        if not filename:
             return
-        # si nous avons une durée des métadonnées, l'utiliser pour le calcul de progression
-        total_ms = getattr(self, "_total_ms", 0)
-        if total_ms == 0:
-            # tenter de lire la durée stockée en secondes définie par show_metadata_for_path
-            total_ms = int(getattr(self, "_duration_sec", 0) * 1000) if getattr(self, "_duration_sec", None) else 0
-            self._total_ms = total_ms
-            if total_ms > 0:
-                self.progress_bar.setMaximum(total_ms)
-        self._current_ms = pos
-        self.progress_bar.setValue(self._current_ms)
-        self.time_label.setText(f"{self._format_ms(self._current_ms)} / {self._format_ms(self._total_ms)}")
+        
+        try:
+            from xml.etree import ElementTree as ET
+            tree = ET.parse(filename)
+            root = tree.getroot()
+            
+            # Vider la playlist actuelle
+            self.playlist_widget.clear()
+            if ProjectPlaylist:
+                self.playlist = ProjectPlaylist(Path(filename).stem)
+            else:
+                self.playlist = SimplePlaylist(Path(filename).stem)
+            
+            # Parser avec namespace XSPF
+            ns = {'xspf': 'http://xspf.org/ns/0/'}
+            tracks = root.findall('.//xspf:track', ns)
+            
+            if not tracks:
+                # Essayer sans namespace si aucun résultat
+                tracks = root.findall('.//track')
+            
+            for track_el in tracks:
+                # Extraire le chemin du fichier
+                loc_el = track_el.find('xspf:location', ns) if track_el.find('xspf:location', ns) is not None else track_el.find('location')
+                if loc_el is None or not loc_el.text:
+                    continue
+                
+                path = loc_el.text.replace("file://", "")
+                if not Path(path).exists():
+                    continue
+                
+                # Extraire les métadonnées
+                title_el = track_el.find('xspf:title', ns) if track_el.find('xspf:title', ns) is not None else track_el.find('title')
+                artist_el = track_el.find('xspf:creator', ns) if track_el.find('xspf:creator', ns) is not None else track_el.find('creator')
+                album_el = track_el.find('xspf:album', ns) if track_el.find('xspf:album', ns) is not None else track_el.find('album')
+                duration_el = track_el.find('xspf:duration', ns) if track_el.find('xspf:duration', ns) is not None else track_el.find('duration')
+                
+                title = title_el.text if title_el is not None and title_el.text else Path(path).stem
+                artist = artist_el.text if artist_el is not None else None
+                album = album_el.text if album_el is not None else None
+                duration = int(duration_el.text) if duration_el is not None and duration_el.text else None
+                
+                # Ajouter à la playlist
+                if ProjectTrack:
+                    try:
+                        t = ProjectTrack(path, title=title, artist=artist, album=album, duration=duration)
+                        self.playlist.add_track(t)
+                    except:
+                        st = SimpleTrack(path, title=title, artist=artist, album=album, duration=duration)
+                        self.playlist.add_track(st)
+                else:
+                    st = SimpleTrack(path, title=title, artist=artist, album=album, duration=duration)
+                    self.playlist.add_track(st)
+                
+                # Mettre à jour l'interface
+                item = QListWidgetItem(Path(path).name)
+                item.setData(Qt.ItemDataRole.UserRole, path)
+                self.playlist_widget.addItem(item)
+            
+            QMessageBox.information(self, "Succès", f"Playlist chargée : {len(tracks)} piste(s)")
+            self.status.showMessage(f"Playlist chargée : {filename}", 5000)
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger la playlist : {e}")
+
+    def edit_tags(self):
+        """Modifier les TAGS (métadonnées) d'un fichier audio MP3 ou FLAC.
+        
+        Cette méthode permet de :
+        - Sélectionner un fichier dans la playlist
+        - Lire les métadonnées actuelles (titre, artiste, album)
+        - Afficher un dialogue d'édition
+        - Sauvegarder les modifications directement dans le fichier
+        - Rafraîchir l'affichage des métadonnées
+        
+        Nécessite la bibliothèque Mutagen pour modifier les fichiers.
+        Supporte les formats MP3 (ID3) et FLAC (Vorbis Comment).
+        """
+        item = self.playlist_widget.currentItem()
+        if not item:
+            QMessageBox.warning(self, "Avertissement", "Aucune musique sélectionnée.")
+            return
+        
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if not path or not Path(path).exists():
+            QMessageBox.warning(self, "Erreur", "Fichier introuvable.")
+            return
+        
+        # Lire les métadonnées actuelles
+        title = artist = album = ""
+        try:
+            if mutagen_available:
+                if path.lower().endswith(".mp3"):
+                    f = MP3(path)
+                    title = f.tags.get("TIT2").text[0] if f.tags and "TIT2" in f.tags else ""
+                    artist = f.tags.get("TPE1").text[0] if f.tags and "TPE1" in f.tags else ""
+                    album = f.tags.get("TALB").text[0] if f.tags and "TALB" in f.tags else ""
+                else:
+                    f = FLAC(path)
+                    title = f.get("title", [""])[0]
+                    artist = f.get("artist", [""])[0]
+                    album = f.get("album", [""])[0]
+        except:
+            pass
+        
+        # Créer le dialogue d'édition
+        from PySide6.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Modifier les TAGS")
+        layout = QFormLayout(dialog)
+        
+        title_edit = QLineEdit(title)
+        artist_edit = QLineEdit(artist)
+        album_edit = QLineEdit(album)
+        
+        layout.addRow("Titre:", title_edit)
+        layout.addRow("Artiste:", artist_edit)
+        layout.addRow("Album:", album_edit)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addRow(buttons)
+        
+        if dialog.exec() == QDialog.Accepted:
+            # Sauvegarder les modifications
+            try:
+                if not mutagen_available:
+                    QMessageBox.warning(self, "Erreur", "Mutagen n'est pas disponible pour modifier les TAGS.")
+                    return
+                
+                if path.lower().endswith(".mp3"):
+                    from mutagen.id3 import TIT2, TPE1, TALB
+                    f = MP3(path)
+                    if not f.tags:
+                        f.add_tags()
+                    f.tags["TIT2"] = TIT2(encoding=3, text=title_edit.text())
+                    f.tags["TPE1"] = TPE1(encoding=3, text=artist_edit.text())
+                    f.tags["TALB"] = TALB(encoding=3, text=album_edit.text())
+                    f.save()
+                else:
+                    f = FLAC(path)
+                    f["title"] = title_edit.text()
+                    f["artist"] = artist_edit.text()
+                    f["album"] = album_edit.text()
+                    f.save()
+                
+                QMessageBox.information(self, "Succès", "TAGS modifiés avec succès.")
+                # Rafraîchir l'affichage des métadonnées
+                self.show_metadata_for_path(path)
+            
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Impossible de modifier les TAGS : {e}")
+
+    def search_online_metadata(self):
+        """Rechercher les métadonnées en ligne via l'API MusicBrainz.
+        
+        Cette méthode permet de :
+        - Rechercher des informations sur un morceau via MusicBrainz
+        - Afficher jusqu'à 5 résultats avec détails complets
+        - Montrer titre, artiste(s), album, et ID MusicBrainz
+        
+        L'API MusicBrainz est une base de données musicale libre et ouverte.
+        Nécessite la bibliothèque 'requests' pour les appels HTTP.
+        
+        Format de recherche : "artist:NomArtiste AND recording:TitreMorceau"
+        """
+        item = self.playlist_widget.currentItem()
+        if not item:
+            QMessageBox.warning(self, "Avertissement", "Aucune musique sélectionnée.")
+            return
+        
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if not path:
+            return
+        
+        # Récupérer les métadonnées actuelles pour la recherche
+        try:
+            if mutagen_available:
+                if path.lower().endswith(".mp3"):
+                    f = MP3(path)
+                    artist = f.tags.get("TPE1").text[0] if f.tags and "TPE1" in f.tags else ""
+                    title = f.tags.get("TIT2").text[0] if f.tags and "TIT2" in f.tags else ""
+                else:
+                    f = FLAC(path)
+                    artist = f.get("artist", [""])[0]
+                    title = f.get("title", [""])[0]
+            else:
+                artist = title = ""
+        except:
+            artist = title = ""
+        
+        # Créer le dialogue de recherche
+        from PySide6.QtWidgets import QDialog, QFormLayout, QDialogButtonBox, QTextEdit
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Rechercher métadonnées en ligne")
+        dialog.resize(500, 400)
+        layout = QVBoxLayout(dialog)
+        
+        form = QFormLayout()
+        artist_edit = QLineEdit(artist)
+        title_edit = QLineEdit(title)
+        form.addRow("Artiste:", artist_edit)
+        form.addRow("Titre:", title_edit)
+        layout.addLayout(form)
+        
+        btn_search = QPushButton("Rechercher")
+        layout.addWidget(btn_search)
+        
+        result_text = QTextEdit()
+        result_text.setReadOnly(True)
+        layout.addWidget(result_text)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        def perform_search():
+            """Fonction interne pour effectuer la recherche API."""
+            result_text.clear()
+            artist_query = artist_edit.text().strip()
+            title_query = title_edit.text().strip()
+            
+            if not artist_query and not title_query:
+                result_text.setText("Veuillez entrer au moins un artiste ou un titre.")
+                return
+            
+            result_text.setText("Recherche en cours...\n")
+            
+            try:
+                import requests
+                # Utilisation de l'API MusicBrainz
+                query = f"artist:{artist_query} AND recording:{title_query}" if artist_query and title_query else artist_query or title_query
+                url = f"https://musicbrainz.org/ws/2/recording/?query={query}&fmt=json&limit=5"
+                
+                response = requests.get(url, headers={'User-Agent': 'MusicManager/1.0'}, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    recordings = data.get('recordings', [])
+                    
+                    if not recordings:
+                        result_text.setText("Aucun résultat trouvé.")
+                        return
+                    
+                    output = f"Trouvé {len(recordings)} résultat(s):\n\n"
+                    for i, rec in enumerate(recordings, 1):
+                        rec_title = rec.get('title', 'N/A')
+                        artists = ', '.join([a.get('name', '') for a in rec.get('artist-credit', [])])
+                        releases = rec.get('releases', [])
+                        album = releases[0].get('title', 'N/A') if releases else 'N/A'
+                        
+                        output += f"{i}. {rec_title}\n"
+                        output += f"   Artiste(s): {artists}\n"
+                        output += f"   Album: {album}\n"
+                        output += f"   ID: {rec.get('id', 'N/A')}\n\n"
+                    
+                    result_text.setText(output)
+                else:
+                    result_text.setText(f"Erreur API: {response.status_code}")
+            
+            except Exception as e:
+                result_text.setText(f"Erreur lors de la recherche: {str(e)}\n\nAssurez-vous que 'requests' est installé:\npip install requests")
+        
+        btn_search.clicked.connect(perform_search)
+        dialog.exec()
+
+    def download_cover_online(self):
+        """Télécharger une pochette d'album depuis Internet.
+        
+        Cette méthode permet de :
+        - Rechercher une pochette via MusicBrainz + Cover Art Archive
+        - Afficher un aperçu de la pochette trouvée (300x300 pixels)
+        - Permettre à l'utilisateur de valider visuellement
+        - Enregistrer la pochette dans le dossier de l'album comme "cover.jpg"
+        - Rafraîchir automatiquement l'affichage
+        
+        Processus :
+        1. Recherche du release_id via MusicBrainz
+        2. Téléchargement de la pochette via Cover Art Archive
+        3. Validation visuelle par l'utilisateur
+        4. Sauvegarde locale
+        
+        Nécessite la bibliothèque 'requests' pour les appels HTTP.
+        """
+        item = self.playlist_widget.currentItem()
+        if not item:
+            QMessageBox.warning(self, "Avertissement", "Aucune musique sélectionnée.")
+            return
+        
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if not path or not Path(path).exists():
+            QMessageBox.warning(self, "Erreur", "Fichier introuvable.")
+            return
+        
+        # Récupérer artiste et album pour la recherche
+        try:
+            if mutagen_available:
+                if path.lower().endswith(".mp3"):
+                    f = MP3(path)
+                    artist = f.tags.get("TPE1").text[0] if f.tags and "TPE1" in f.tags else ""
+                    album = f.tags.get("TALB").text[0] if f.tags and "TALB" in f.tags else ""
+                else:
+                    f = FLAC(path)
+                    artist = f.get("artist", [""])[0]
+                    album = f.get("album", [""])[0]
+            else:
+                artist = album = ""
+        except:
+            artist = album = ""
+        
+        # Créer le dialogue
+        from PySide6.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Télécharger pochette en ligne")
+        dialog.resize(600, 500)
+        layout = QVBoxLayout(dialog)
+        
+        form = QFormLayout()
+        artist_edit = QLineEdit(artist)
+        album_edit = QLineEdit(album)
+        form.addRow("Artiste:", artist_edit)
+        form.addRow("Album:", album_edit)
+        layout.addLayout(form)
+        
+        btn_search = QPushButton("Rechercher pochette")
+        layout.addWidget(btn_search)
+        
+        preview_label = QLabel("Aperçu de la pochette apparaîtra ici")
+        preview_label.setAlignment(Qt.AlignCenter)
+        preview_label.setFixedSize(300, 300)
+        preview_label.setStyleSheet("border: 1px solid #555; background: #1a1a1a;")
+        layout.addWidget(preview_label, alignment=Qt.AlignCenter)
+        
+        btn_row = QHBoxLayout()
+        btn_save = QPushButton("Enregistrer dans le dossier")
+        btn_save.setEnabled(False)
+        btn_cancel = QPushButton("Annuler")
+        btn_row.addWidget(btn_save)
+        btn_row.addWidget(btn_cancel)
+        layout.addLayout(btn_row)
+        
+        btn_cancel.clicked.connect(dialog.reject)
+        
+        # Utiliser une liste pour stocker l'image dans la closure
+        downloaded_image_data = [None]
+        
+        def search_cover():
+            """Fonction interne pour rechercher et télécharger la pochette."""
+            preview_label.setText("Recherche en cours...")
+            artist_q = artist_edit.text().strip()
+            album_q = album_edit.text().strip()
+            
+            if not artist_q or not album_q:
+                QMessageBox.warning(dialog, "Avertissement", "Veuillez entrer l'artiste et l'album.")
+                preview_label.setText("Aperçu de la pochette apparaîtra ici")
+                return
+            
+            try:
+                import requests
+                # Utilisation de Cover Art Archive via MusicBrainz
+                query = f"artist:{artist_q} AND release:{album_q}"
+                url = f"https://musicbrainz.org/ws/2/release/?query={query}&fmt=json&limit=1"
+                
+                response = requests.get(url, headers={'User-Agent': 'MusicManager/1.0'}, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    releases = data.get('releases', [])
+                    
+                    if not releases:
+                        preview_label.setText("Aucune pochette trouvée")
+                        return
+                    
+                    release_id = releases[0].get('id')
+                    cover_url = f"https://coverartarchive.org/release/{release_id}/front-250"
+                    
+                    cover_response = requests.get(cover_url, timeout=10)
+                    
+                    if cover_response.status_code == 200:
+                        downloaded_image_data[0] = cover_response.content
+                        pixmap = qpix_from_bytes(cover_response.content, max_size=(300, 300))
+                        preview_label.setPixmap(pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                        btn_save.setEnabled(True)
+                    else:
+                        preview_label.setText("Pochette non disponible")
+                else:
+                    preview_label.setText(f"Erreur API: {response.status_code}")
+            
+            except Exception as e:
+                preview_label.setText(f"Erreur: {str(e)[:50]}")
+                QMessageBox.warning(dialog, "Erreur", f"Erreur lors de la recherche:\n{str(e)}\n\nAssurez-vous que 'requests' est installé.")
+        
+        def save_cover():
+            """Fonction interne pour sauvegarder la pochette téléchargée."""
+            if not downloaded_image_data[0]:
+                return
+            
+            folder = Path(path).parent
+            save_path = folder / "cover.jpg"
+            
+            try:
+                with open(save_path, "wb") as f:
+                    f.write(downloaded_image_data[0])
+                
+                QMessageBox.information(dialog, "Succès", f"Pochette enregistrée :\n{save_path}")
+                # Rafraîchir l'affichage
+                self.show_metadata_for_path(path)
+                dialog.accept()
+            
+            except Exception as e:
+                QMessageBox.critical(dialog, "Erreur", f"Impossible d'enregistrer la pochette : {e}")
+        
+        btn_search.clicked.connect(search_cover)
+        btn_save.clicked.connect(save_cover)
+        
+        dialog.exec()
 
 
-# ----------------------------
-# Run
-# ----------------------------
-# Point d'entrée de l'application : initialise QApplication et affiche la
-# fenêtre principale.
+
+# Enhancements (MIME check, auto-save playlist, XSPF online validation, drag&drop)
+# These are appended as non-invasive monkey-patches so original code remains unchanged.
+
+import threading
+
+def _validate_xspf_online(filepath: str) -> bool:
+    print("DEBUG: Tente de valider le fichier XSPF en ligne...")
+    
+    try:
+        import requests
+    except ImportError:
+        print("ERREUR CRITIQUE: Le module 'requests' n'est pas installé.")
+        return False
+        
+    try:
+        with open(filepath, "rb") as f:
+            files = {'file': (Path(filepath).name, f, 'application/xspf+xml')}
+            
+            # Utilisation d'un timeout plus long pour éviter les échecs rapides sur un réseau lent
+            r = requests.post("https://validator.xspf.org/validate", files=files, timeout=30)
+            
+            if r.status_code == 200:
+                print("DEBUG: Validation en ligne réussie (Code 200).")
+                return True
+            else:
+                print(f"DEBUG: Validation en ligne ÉCHOUÉE. Code de statut HTTP: {r.status_code}")
+                # Vous pouvez inspecter r.text pour voir le message d'erreur du validateur ici si nécessaire
+                return False
+                
+    except requests.exceptions.Timeout:
+        print("ERREUR: Le délai de connexion (Timeout) est dépassé pour la validation en ligne.")
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"ERREUR RÉSEAU/REQUÊTE: Une erreur s'est produite lors de la connexion. Détails: {e}")
+        return False
+    except Exception as e:
+        print(f"ERREUR INCONNUE lors de la validation. Détails: {e}")
+        return False
+
+# Pensez à ajouter 'import requests' au début du fichier si ce n'est pas déjà fait.
+
+# Keep original methods to call them from wrappers
+_orig_scanner_run = ScannerThread.run
+_orig_on_scan_finished = MusicManagerMain._on_scan_finished
+_orig_save_playlist = MusicManagerMain.save_playlist
+
+def _enhanced_scanner_run(self):
+	"""Replacement run: uses python-magic if present, else falls back to extension check."""
+	self.status.emit("Lancement du scan (vérification MIME)...")
+	found = []
+	all_paths = []
+	for root, _, files in os.walk(self.folder):
+		for name in files:
+			all_paths.append(os.path.join(root, name))
+
+	total = len(all_paths) if all_paths else 1
+	checked = 0
+
+	# try to import python-magic
+	magic_available = False
+	try:
+		import magic as _magic  # type: ignore
+		magic_available = True
+	except Exception:
+		magic_available = False
+
+	for full in all_paths:
+		if not getattr(self, "_running", True):
+			break
+		checked += 1
+		accept = False
+		try:
+			if magic_available:
+				try:
+					mtype = _magic.from_file(full, mime=True)
+					if isinstance(mtype, str) and mtype.startswith("audio/"):
+						accept = True
+				except Exception:
+					accept = False
+			if not accept:
+				# fallback to extension check
+				if full.lower().endswith((".mp3", ".flac")):
+					accept = True
+		except Exception:
+			accept = full.lower().endswith((".mp3", ".flac"))
+
+		if accept:
+			found.append(full)
+			try:
+				self.file_found.emit(full)
+			except Exception:
+				pass
+
+		try:
+			self.progress.emit(int(checked / total * 100))
+		except Exception:
+			pass
+
+		# keep a small sleep to avoid UI spin; preserve original behaviour
+		time.sleep(0.01)
+
+	try:
+		self.finished.emit(found)
+		self.status.emit(f"Scan terminé — {len(found)} fichier(s).")
+	except Exception:
+		pass
+
+# attach enhanced run
+ScannerThread.run = _enhanced_scanner_run
+
+def _write_playlist_fallback(pl, filename: str):
+	"""Write a simple XSPF for a playlist-like object."""
+	from xml.etree import ElementTree as ET
+	root = ET.Element("playlist", version="1", xmlns="http://xspf.org/ns/0/")
+	title_el = ET.SubElement(root, "title"); title_el.text = getattr(pl, "name", Path(filename).stem)
+	tl = ET.SubElement(root, "trackList")
+	for t in getattr(pl, "tracks", []):
+		p = t.path if hasattr(t, "path") else t
+		tr_el = ET.SubElement(tl, "track")
+		loc = ET.SubElement(tr_el, "location"); loc.text = f"file://{p}"
+		try:
+			if getattr(t, "title", None): ET.SubElement(tr_el, "title").text = t.title
+			if getattr(t, "artist", None): ET.SubElement(tr_el, "creator").text = t.artist
+			if getattr(t, "album", None): ET.SubElement(tr_el, "album").text = t.album
+			if getattr(t, "duration", None): ET.SubElement(tr_el, "duration").text = str(t.duration)
+		except Exception:
+			pass
+	tree = ET.ElementTree(root)
+	try:
+		ET.indent(tree, space="  ", level=0)
+	except Exception:
+		pass
+	tree.write(filename, encoding="utf-8", xml_declaration=True)
+
+def _autosave_playlist_default(self, files: List[str]):
+    """Auto-save playlist_default.xspf in scanned folder after scan finishes."""
+    try:
+        folder = Path(self.folder_input.text().strip())
+        if not folder or not files:
+            return
+        out = folder / "playlist_default.xspf"
+        # prefer project writer if available
+        try:
+            if write_xspf and hasattr(self.playlist, "tracks"):
+                try:
+                    write_xspf(self.playlist, str(out))
+                except Exception:
+                    _write_playlist_fallback(self.playlist, str(out))
+            else:
+                _write_playlist_fallback(self.playlist, str(out))
+            
+            # Mise à jour directe car nous sommes encore dans le thread principal ici (avant le threading.Thread)
+            self.status.showMessage(f"Playlist par défaut enregistrée: {out}", 8000)
+        except Exception as e:
+            self.status.showMessage(f"Échec sauvegarde playlist par défaut: {e}", 8000)
+
+        # --- CORRECTION DU CRASH DE THREADING ICI ---
+        # Nous devons utiliser un Signal pour communiquer du Thread -> GUI
+        from PySide6.QtCore import QObject, Signal
+
+        class WorkerSignal(QObject):
+            message = Signal(str, int)
+
+        # Créer le signaleur et le connecter à la barre de statut
+        self._worker_signal = WorkerSignal()
+        self._worker_signal.message.connect(self.status.showMessage)
+
+        # attempt online validate (non-blocking) inside a thread
+        def _validate_and_notify(path):
+            # Cette fonction tourne en arrière-plan
+            valid = _validate_xspf_online(str(path))
+            if valid:
+                # Émettre un signal (Thread-Safe) au lieu de toucher à self.status directement
+                self._worker_signal.message.emit("Playlist par défaut validée en ligne", 6000)
+            else:
+                self._worker_signal.message.emit("Validation en ligne indisponible ou invalide", 6000)
+
+        th = threading.Thread(target=_validate_and_notify, args=(out,), daemon=True)
+        th.start()
+
+    except Exception:
+        pass
+
+def _enhanced_on_scan_finished(self, files: List[str]):
+	"""Wrapper around original _on_scan_finished: call original then autosave default playlist."""
+	# call original handler (if exists)
+	try:
+		_orig_on_scan_finished(self, files)
+	except Exception:
+		# fallback: set internal state similarly
+		try:
+			self.found_files = files
+			self.scan_progress.setValue(100)
+			self.status.showMessage(f"Scan terminé — {len(files)} fichier(s) trouvé(s).")
+		except Exception:
+			pass
+	# Auto-save playlist_default
+	try:
+		_autosave_playlist_default(self, files)
+	except Exception:
+		pass
+
+# patch method
+MusicManagerMain._on_scan_finished = _enhanced_on_scan_finished
+
+def _enhanced_save_playlist(self):
+	"""Wrapper: call original save_playlist, then offer online validation for the saved file."""
+	# We call original implementation which opens file dialog and saves.
+	try:
+		_orig_save_playlist(self)
+	except Exception as e:
+		# propagate original error behaviour
+		raise
+	# Ask user to validate (user selects file to validate)
+	reply = QMessageBox.question(self, "Validation XSPF", "Voulez-vous valider la playlist via validator.xspf.org ?", QMessageBox.Yes | QMessageBox.No)
+	if reply == QMessageBox.Yes:
+		# ask for file to validate (preselect home)
+		fpath, _ = QFileDialog.getOpenFileName(self, "Sélectionner le fichier XSPF à valider", str(Path.home()), "XSPF files (*.xspf)")
+		if fpath:
+			ok = _validate_xspf_online(fpath)
+			if ok:
+				QMessageBox.information(self, "Validation", "Le validateur a répondu OK (HTTP 200).")
+			else:
+				QMessageBox.warning(self, "Validation", "Validation en ligne échouée ou requête indisponible.")
+
+# patch save
+MusicManagerMain.save_playlist = _enhanced_save_playlist
+
+def _add_file_to_playlist(self, path: str):
+	"""Add a single file to playlist and UI (used by drag & drop)."""
+	try:
+		if not path or not Path(path).exists():
+			return
+		# prevent duplicates by path
+		for i in range(self.playlist_widget.count()):
+			item = self.playlist_widget.item(i)
+			if item and item.data(Qt.ItemDataRole.UserRole) == path:
+				# already present
+				return
+		# collect metadata if possible
+		title = Path(path).stem
+		artist = None
+		album = None
+		duration = None
+		try:
+			if AudioFile:
+				af = AudioFile.from_path(path)
+				md = af.read_metadata()
+				title = md.title or title
+				artist = md.artist
+				album = md.album
+				duration = md.duration_sec
+		except Exception:
+			pass
+		# add to model
+		if ProjectTrack and ProjectPlaylist:
+			try:
+				t = ProjectTrack(path, title=title, artist=artist, album=album, duration=duration)
+				self.playlist.add_track(t)
+			except Exception:
+				st = SimpleTrack(path, title=title, artist=artist, album=album, duration=duration)
+				if isinstance(self.playlist, SimplePlaylist):
+					self.playlist.add_track(st)
+		else:
+			st = SimpleTrack(path, title=title, artist=artist, album=album, duration=duration)
+			if isinstance(self.playlist, SimplePlaylist):
+				self.playlist.add_track(st)
+		# update UI
+		item = QListWidgetItem(Path(path).name)
+		item.setData(Qt.ItemDataRole.UserRole, path)
+		self.playlist_widget.addItem(item)
+		# status
+		try:
+			self.status.showMessage(f"Fichier ajouté à la playlist: {Path(path).name}", 4000)
+		except Exception:
+			pass
+	except Exception:
+		pass
+
+# attach method to class
+MusicManagerMain.add_file_to_playlist = _add_file_to_playlist
+
+def _setup_playlist_dnd_for_instance(win: MusicManagerMain):
+	"""Configure drop handling on the playlist widget for an instance."""
+	try:
+		w = win.playlist_widget
+		w.setAcceptDrops(True)
+		# define dropEvent bound to the instance (captures win)
+		def _dropEvent(event):
+			if event.mimeData().hasUrls():
+				added = 0
+				for url in event.mimeData().urls():
+					try:
+						path = url.toLocalFile()
+					except Exception:
+						path = str(url.toString())
+					if path and Path(path).suffix.lower() in (".mp3", ".flac"):
+						try:
+							win.add_file_to_playlist(path)
+							added += 1
+						except Exception:
+							pass
+				if added:
+					try:
+						win.status.showMessage(f"{added} fichier(s) déposé(s) dans la playlist", 4000)
+					except Exception:
+						pass
+				event.acceptProposedAction()
+			else:
+				event.ignore()
+		# bind to widget
+		w.dropEvent = _dropEvent
+		# visual feedback via stylesheet tweak is left to UI designer
+	except Exception:
+		pass
+
+def enhance_gui_instance(win: MusicManagerMain):
+	"""Apply instance-level enhancements (called once after window creation)."""
+	try:
+		_setup_playlist_dnd_for_instance(win)
+		# Optionally show which backend is used (library vs fallback) in status bar
+		try:
+			used = "library" if use_project_library else "fallback"
+			backends = []
+			if qt_multimedia_available: backends.append("QtMultimedia")
+			if pygame_available: backends.append("pygame")
+			if mutagen_available: backends.append("mutagen")
+			win.status.showMessage(f"Backend: {used} — Audio: {', '.join(backends)}", 6000)
+		except Exception:
+			pass
+	except Exception:
+		pass
+
+# ensure enhance_gui is available to main
+def _call_enhance_later(win):
+	QTimer.singleShot(400, lambda: enhance_gui_instance(win))
+
+
+# Inject call into main() run (non-intrusive)
+# We update main to schedule our enhancement after the window is shown.
+
 def main():
-    """Point d'entrée de l'application GUI.
+	"""Point d'entrée de l'application GUI.
 
-    Initialise QApplication, crée la fenêtre principale et lance la boucle d'événement Qt.
-    Conserver simple pour permettre l'appel direct (python music_manager_gui.py).
-    """
-    app = QApplication(sys.argv)
-    win = MusicManagerMain()
-    win.show()
-    from PySide6.QtCore import QTimer
-    def _print_sizes():
-        anim = getattr(win, "_anim_widget", None)
-        container = getattr(win, "_anim_container", None)
-        print("DEBUG LAYOUT ► anim:", anim.size() if anim else "missing",
-              "container:", container.size() if container else "missing",
-              "playlist viewport:", win.playlist_widget.viewport().size())
-    QTimer.singleShot(300, _print_sizes)
-    sys.exit(app.exec())
+	Initialise QApplication, crée la fenêtre principale et lance la boucle d'événement Qt.
+	Conserver simple pour permettre l'appel direct (python music_manager_gui.py).
+	"""
+	app = QApplication(sys.argv)
+	win = MusicManagerMain()
+	win.show()
+	# schedule enhancements (drag&drop on playlist, status message, etc.)
+	_call_enhance_later(win)
+	from PySide6.QtCore import QTimer
+	def _print_sizes():
+		anim = getattr(win, "_anim_widget", None)
+		container = getattr(win, "_anim_container", None)
+		print("DEBUG LAYOUT ► anim:", anim.size() if anim else "missing",
+			  "container:", container.size() if container else "missing",
+			  "playlist viewport:", win.playlist_widget.viewport().size())
+	QTimer.singleShot(300, _print_sizes)
+	sys.exit(app.exec())
 
 if __name__ == "__main__":
-    # Exécution directe du script : lance l'application GUI.
-    main()
+	# Exécution directe du script : lance l'application GUI.
+	main()
